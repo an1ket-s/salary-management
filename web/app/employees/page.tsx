@@ -10,6 +10,9 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { api, type Employee } from "@/lib/api";
@@ -64,9 +67,6 @@ function formatDate(iso: string) {
 function toDateInput(iso: string) {
   return iso ? iso.split("T")[0] : "";
 }
-
-const selectCls =
-  "h-10 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm text-slate-700 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200 disabled:opacity-50";
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -250,21 +250,33 @@ export default function EmployeesPage() {
             onChange={e => setSearchInput(e.target.value)}
             className="w-56"
           />
-          <select value={country}    onChange={e => filter(setCountry,    e.target.value)} className={selectCls}>
-            <option value="">All Countries</option>
-            {meta.countries.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select value={department} onChange={e => filter(setDepartment, e.target.value)} className={selectCls}>
-            <option value="">All Departments</option>
-            {meta.departments.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <select value={role}       onChange={e => filter(setRole,       e.target.value)} className={selectCls}>
-            <option value="">All Roles</option>
-            {meta.roles.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <select value={sortKey}    onChange={e => { setSortKey(e.target.value); setPage(1); }} className={selectCls}>
-            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <Select value={country || "__all"} onValueChange={v => filter(setCountry, v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">All Countries</SelectItem>
+              {meta.countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={department || "__all"} onValueChange={v => filter(setDepartment, v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">All Departments</SelectItem>
+              {meta.departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={role || "__all"} onValueChange={v => filter(setRole, v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">All Roles</SelectItem>
+              {meta.roles.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={sortKey} onValueChange={v => { setSortKey(v); setPage(1); }}>
+            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {SORT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </Card>
 
@@ -387,28 +399,34 @@ export default function EmployeesPage() {
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="role">Role</Label>
-                <select id="role" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                  className={`${selectCls} w-full`}>
-                  <option value="">Select role</option>
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <Label>Role</Label>
+                <Select value={form.role || "__none"} onValueChange={v => setForm(f => ({ ...f, role: v === "__none" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Select role</SelectItem>
+                    {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="department">Department</Label>
-                <select id="department" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
-                  className={`${selectCls} w-full`}>
-                  <option value="">Select department</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+                <Label>Department</Label>
+                <Select value={form.department || "__none"} onValueChange={v => setForm(f => ({ ...f, department: v === "__none" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Select department</SelectItem>
+                    {DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="country">Country</Label>
-                <select id="country" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
-                  className={`${selectCls} w-full`}>
-                  <option value="">Select country</option>
-                  {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <Label>Country</Label>
+                <Select value={form.country || "__none"} onValueChange={v => setForm(f => ({ ...f, country: v === "__none" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Select country</SelectItem>
+                    {COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="salary">Salary</Label>
