@@ -8,7 +8,6 @@ export default defineConfig({
     setupFiles: ["./src/tests/setup.ts"],
     fileParallelism: false,
     env: {
-      DATABASE_URL: "file:./test.db",
       PORT: "3002",
       NODE_ENV: "test",
     },
