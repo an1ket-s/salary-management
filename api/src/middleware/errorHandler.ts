@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { Prisma } from "@prisma/client";
 
 export class AppError extends Error {
   constructor(
@@ -21,10 +22,15 @@ export function errorHandler(
     return;
   }
 
-  // Prisma unique constraint violation
-  if (err.message.includes("Unique constraint")) {
-    res.status(409).json({ error: "A record with that value already exists" });
-    return;
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P2002") {
+      res.status(409).json({ error: "A record with that value already exists" });
+      return;
+    }
+    if (err.code === "P2025") {
+      res.status(404).json({ error: "Record not found" });
+      return;
+    }
   }
 
   console.error(err);

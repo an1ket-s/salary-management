@@ -1,7 +1,7 @@
-import { afterEach, afterAll } from "vitest";
+import { beforeEach, afterAll } from "vitest";
 import prisma from "../lib/prisma";
 
-afterEach(async () => {
+beforeEach(async () => {
   await prisma.employee.deleteMany();
   await prisma.nameBank.deleteMany();
 });
