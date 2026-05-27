@@ -4,17 +4,84 @@ import prisma from "../lib/prisma.js";
 export type TrendBy = "week" | "month" | "year";
 
 export const insightsRepository = {
-	async getEmployeeSlice(country?: string) {
-		return prisma.employee.findMany({
-			where: country ? { country } : undefined,
-			select: {
-				salary: true,
-				country: true,
-				department: true,
-				role: true,
-				joiningDate: true,
-			},
-		});
+	// Single-country path: 4 parallel aggregate queries → ~10-20 rows total returned.
+	// No full table scan into Node.js memory.
+	async getInsightsSingleCountry(country: string) {
+		const [kpi, maxEmp, minEmp, deptGroups] = await Promise.all([
+			prisma.employee.aggregate({
+				where: { country },
+				_count: { id: true },
+				_avg: { salary: true },
+			}),
+			prisma.employee.findFirst({
+				where: { country },
+				orderBy: { salary: "desc" },
+				select: { salary: true, role: true, department: true },
+			}),
+			prisma.employee.findFirst({
+				where: { country },
+				orderBy: { salary: "asc" },
+				select: { salary: true, role: true, department: true },
+			}),
+			prisma.employee.groupBy({
+				by: ["department"],
+				where: { country },
+				_avg: { salary: true },
+				_count: { id: true },
+				orderBy: { department: "asc" },
+			}),
+		]);
+		return { kpi, maxEmp, minEmp, deptGroups };
+	},
+
+	// All-countries path: aggregates at the country/dept level.
+	// Returns ~50 rows total instead of every employee row.
+	// The service handles INR conversion on these aggregates.
+	async getInsightsAllCountries() {
+		const [countryStats, deptStats, maxPerCountry, minPerCountry] =
+			await Promise.all([
+				prisma.employee.groupBy({
+					by: ["country"],
+					_count: { id: true },
+					_sum: { salary: true },
+				}),
+				prisma.employee.groupBy({
+					by: ["country", "department"],
+					_count: { id: true },
+					_sum: { salary: true },
+				}),
+				// One row per country: employee with the highest local salary
+				prisma.$queryRaw<
+					{
+						country: string;
+						salary: number;
+						role: string;
+						department: string;
+					}[]
+				>(
+					Prisma.sql`
+          SELECT DISTINCT ON (country) country, salary::float, role, department
+          FROM "Employee"
+          ORDER BY country, salary DESC
+        `,
+				),
+				// One row per country: employee with the lowest local salary
+				prisma.$queryRaw<
+					{
+						country: string;
+						salary: number;
+						role: string;
+						department: string;
+					}[]
+				>(
+					Prisma.sql`
+          SELECT DISTINCT ON (country) country, salary::float, role, department
+          FROM "Employee"
+          ORDER BY country, salary ASC
+        `,
+				),
+			]);
+		return { countryStats, deptStats, maxPerCountry, minPerCountry };
 	},
 
 	async getHeadcountByCountry() {
@@ -34,10 +101,9 @@ export const insightsRepository = {
 	async getHiringTrend(
 		country?: string,
 		trendBy: TrendBy = "year",
-		yearFilter?: string, // e.g. "2024" — used when trendBy = "month"
-		monthFilter?: string, // e.g. "2024-01" — used when trendBy = "week"
+		yearFilter?: string,
+		monthFilter?: string,
 	) {
-		// Build WHERE conditions
 		const conds: Prisma.Sql[] = [];
 		if (country) {
 			conds.push(Prisma.sql`country = ${country}`);
@@ -54,7 +120,7 @@ export const insightsRepository = {
 		if (monthFilter) {
 			const [y, m] = monthFilter.split("-").map(Number);
 			const start = new Date(y, m - 1, 1);
-			const end = new Date(y, m, 1); // first day of next month
+			const end = new Date(y, m, 1);
 			conds.push(Prisma.sql`"joiningDate" >= ${start}::timestamptz`);
 			conds.push(Prisma.sql`"joiningDate" <  ${end}::timestamptz`);
 		}
@@ -62,7 +128,6 @@ export const insightsRepository = {
 			? Prisma.sql`WHERE ${Prisma.join(conds, " AND ")}`
 			: Prisma.sql``;
 
-		// Build GROUP BY / ORDER BY expressions
 		const [labelExpr, groupExpr] =
 			trendBy === "week"
 				? [
