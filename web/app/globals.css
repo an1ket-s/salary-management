@@ -2,49 +2,49 @@
 @import "tw-animate-css";
 
 @theme inline {
-  --color-background:           var(--background);
-  --color-foreground:           var(--foreground);
-  --color-card:                 var(--card);
-  --color-card-foreground:      var(--card-foreground);
-  --color-popover:              var(--popover);
-  --color-popover-foreground:   var(--popover-foreground);
-  --color-primary:              var(--primary);
-  --color-primary-foreground:   var(--primary-foreground);
-  --color-secondary:            var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted:                var(--muted);
-  --color-muted-foreground:     var(--muted-foreground);
-  --color-accent:               var(--accent);
-  --color-accent-foreground:    var(--accent-foreground);
-  --color-destructive:          var(--destructive);
-  --color-border:               var(--border);
-  --color-input:                var(--input);
-  --color-ring:                 var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
 }
 
 :root {
-  --background:           hsl(0 0% 100%);
-  --foreground:           hsl(222 47% 11%);
-  --card:                 hsl(0 0% 100%);
-  --card-foreground:      hsl(222 47% 11%);
-  --popover:              hsl(0 0% 100%);
-  --popover-foreground:   hsl(222 47% 11%);
-  --primary:              hsl(222 47% 11%);
-  --primary-foreground:   hsl(210 40% 98%);
-  --secondary:            hsl(210 40% 96%);
-  --secondary-foreground: hsl(222 47% 11%);
-  --muted:                hsl(210 40% 96%);
-  --muted-foreground:     hsl(215 16% 47%);
-  --accent:               hsl(210 40% 96%);
-  --accent-foreground:    hsl(222 47% 11%);
-  --destructive:          hsl(0 84% 60%);
-  --border:               hsl(214 32% 91%);
-  --input:                hsl(214 32% 91%);
-  --ring:                 hsl(222 47% 11%);
-  --radius:               0.5rem;
+	--background: hsl(0 0% 100%);
+	--foreground: hsl(222 47% 11%);
+	--card: hsl(0 0% 100%);
+	--card-foreground: hsl(222 47% 11%);
+	--popover: hsl(0 0% 100%);
+	--popover-foreground: hsl(222 47% 11%);
+	--primary: hsl(222 47% 11%);
+	--primary-foreground: hsl(210 40% 98%);
+	--secondary: hsl(210 40% 96%);
+	--secondary-foreground: hsl(222 47% 11%);
+	--muted: hsl(210 40% 96%);
+	--muted-foreground: hsl(215 16% 47%);
+	--accent: hsl(210 40% 96%);
+	--accent-foreground: hsl(222 47% 11%);
+	--destructive: hsl(0 84% 60%);
+	--border: hsl(214 32% 91%);
+	--input: hsl(214 32% 91%);
+	--ring: hsl(222 47% 11%);
+	--radius: 0.5rem;
 }
 
 /* ── Dialog animations ─────────────────────────────────────────────────────── */
@@ -52,19 +52,84 @@
  * We use the CSS individual `scale` property (not transform shorthand) so
  * these keyframes don't fight with Tailwind's `translate: -50% -50%` centering.
  */
-@keyframes dialog-overlay-in  { from { opacity: 0; } to { opacity: 1; } }
-@keyframes dialog-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes dialog-overlay-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes dialog-overlay-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
 
 @keyframes dialog-in {
-  from { opacity: 0; scale: 0.93; }
-  to   { opacity: 1; scale: 1;    }
+	from {
+		opacity: 0;
+		scale: 0.93;
+	}
+	to {
+		opacity: 1;
+		scale: 1;
+	}
 }
 @keyframes dialog-out {
-  from { opacity: 1; scale: 1;    }
-  to   { opacity: 0; scale: 0.97; }
+	from {
+		opacity: 1;
+		scale: 1;
+	}
+	to {
+		opacity: 0;
+		scale: 0.97;
+	}
 }
 
-@utility animate-dialog-in   { animation: dialog-in          350ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-@utility animate-dialog-out  { animation: dialog-out         220ms cubic-bezier(0.4,  0, 1, 1)   both; }
-@utility animate-overlay-in  { animation: dialog-overlay-in  250ms ease-out                      both; }
-@utility animate-overlay-out { animation: dialog-overlay-out 220ms ease-in                       both; }
+@utility animate-dialog-in {
+	animation: dialog-in 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@utility animate-dialog-out {
+	animation: dialog-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+@utility animate-overlay-in {
+	animation: dialog-overlay-in 250ms ease-out both;
+}
+@utility animate-overlay-out {
+	animation: dialog-overlay-out 220ms ease-in both;
+}
+
+/* ── Chart drill-down transition ───────────────────────────────────────────── */
+/*
+ * Uses the individual `translate` property (not transform shorthand) so it
+ * doesn't interfere with tw-animate-css or Tailwind utility transforms.
+ */
+@keyframes chart-in {
+	from {
+		opacity: 0;
+		translate: 0 8px;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+	}
+}
+@utility animate-chart-in {
+	animation: chart-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Recharts focus-ring suppression ───────────────────────────────────────── */
+/*
+ * Recharts renders tabIndex="0" on both its wrapper div and the SVG surface.
+ * Clicking a chart focuses those elements and the browser draws a focus ring.
+ * Strip the outline unconditionally — charts are not keyboard-navigable.
+ * Using !important so this beats the browser UA :focus-visible rule.
+ */
+.recharts-wrapper,
+.recharts-surface {
+	outline: none !important;
+}

@@ -5,7 +5,8 @@ const env = {
   REDIS_HOST:     process.env.REDIS_HOST ?? "localhost",
   REDIS_PORT:     parseInt(process.env.REDIS_PORT ?? "6379", 10),
   REDIS_USERNAME: process.env.REDIS_USERNAME ?? "default",
-  REDIS_PASSWORD: process.env.REDIS_PASSWORD ?? "",
+  REDIS_PASSWORD:          process.env.REDIS_PASSWORD ?? "",
+  EXCHANGE_RATE_API_KEY:   process.env.EXCHANGE_RATE_API_KEY ?? "",
 };
 
 export default env;

@@ -73,30 +73,21 @@ Layout: `grid grid-cols-4` — each card uses the existing `Card` component with
 
 ---
 
-#### Chart 3 — Salary Distribution by Role (Grouped Bar: Min / Avg / Max)
-
-- **Type:** `BarChart` grouped — 3 bars per role (min, avg, max)
-- **X-axis:** role name
-- **Y-axis:** salary value
-- **Bar fills:** `#93C5FD` (min) · `#6366F1` (avg) · `#1E40AF` (max)
-- **Legend:** Min / Avg / Max inline colour swatches
-- **Tooltip:** all three values for the hovered role
-- **Data source:** `/api/insights` → `salaryRangeByRole[]`
-- **Why:** avg alone hides spread; showing min/max reveals pay equity issues
-
----
-
-#### Chart 4 — Hiring Trend (Area Chart — employees joined per month)
+#### Chart 4 — Hiring Trend (Area Chart)
 
 - **Type:** `AreaChart` (Recharts) — smoothed, single area
-- **X-axis:** month label (e.g. "Jan 2024")
+- **X-axis:** period label — format depends on `trendBy` (see below)
 - **Y-axis:** number of employees joined
 - **Area fill:** indigo gradient (`#6366F1` → transparent)
 - **Stroke:** `#4F46E5`
 - **Dot:** shown on hover only
-- **Tooltip:** month + count joined
-- **Data source:** `/api/insights` → `hiringTrend[]` (grouped by month from `joiningDate`)
-- **Why:** reveals hiring velocity and seasonal patterns
+- **Tooltip:** period label + count joined
+- **Data source:** `/api/insights?trendBy=` → `hiringTrend[]`
+- **Period filter (toggle buttons — Week / Month / Year):**
+  - `week`  → groups by ISO week; label format: `W3 '24`
+  - `month` → groups by calendar month (default); label format: `Jan '24`
+  - `year`  → groups by year; label format: `2024`
+- **Why:** reveals hiring velocity and seasonal patterns at multiple granularities
 
 ---
 
@@ -117,46 +108,70 @@ Layout: `grid grid-cols-4` — each card uses the existing `Card` component with
 
 ```
 [ KPI ] [ KPI ] [ KPI ] [ KPI ]
-[ Chart 1 — Avg Salary/Dept (bar)      ] [ Chart 5 — Dept Donut         ]
-[ Chart 3 — Salary Range/Role (grouped)] [ Chart 2 — Count/Country (bar)]
-[ Chart 4 — Hiring Trend (area) — full width                             ]
+[ Chart 1 — Avg Salary/Dept (bar) col-2 ] [ Chart 5 — Dept Donut   col-1 ]
+[ Chart 2 — Count/Country (bar)   col-1 ] [ Chart 4 — Hiring Trend col-2 ]
 ```
 
-Grid: `grid-cols-3`, Charts 1 and 3 span `col-span-2`, Chart 4 spans `col-span-3`.
+Grid: `grid-cols-3`. Chart 1 and Chart 4 span `col-span-2`; Charts 2 and 5 span `col-span-1`.
 
 ---
 
 #### Backend endpoint: `GET /api/insights`
 
-Response shape:
+**Query params:**
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `country` | string | `""` (all) | Filter insights to one country. Empty = all countries, salaries normalised to INR. |
+
+**Currency rules:**
+- `country` is empty → convert all salaries to **INR** using the exchange-rate API (base: INR). Cached as `exg_rates:INR` for 24 h.
+- `country` is set → return salaries in that **country's local currency** as stored in DB. No conversion needed.
+- The response always includes a top-level `currency` string so the frontend never has to infer it.
+
+**Country → currency map (local currency codes):**
+
+| Country | Currency |
+|---|---|
+| India | INR |
+| USA | USD |
+| UK | GBP |
+| Germany | EUR |
+| France | EUR |
+| Japan | JPY |
+| Brazil | BRL |
+| Canada | CAD |
+| Australia | AUD |
+| Singapore | SGD |
+
+**Chart filter scope:**
+
+| Chart | Responds to `?country=` |
+|---|---|
+| KPI cards | Yes |
+| Chart 1 — Avg Salary/Dept | Yes |
+| Chart 3 — Salary Range/Role | Yes |
+| Chart 4 — Hiring Trend | Yes |
+| Chart 5 — Dept Donut | Yes |
+| Chart 2 — Headcount by Country | **No** — always shows all countries (it IS the geographic breakdown) |
+
+**Response shape:**
 
 ```json
 {
-	"data": {
-		"kpi": {
-			"totalEmployees": 10000,
-			"avgSalary": 950000,
-			"maxSalary": {
-				"value": 5000000,
-				"role": "VP",
-				"department": "Engineering"
-			},
-			"minSalary": {
-				"value": 120000,
-				"role": "Junior Engineer",
-				"department": "HR"
-			}
-		},
-		"avgSalaryByDepartment": [{ "department": "Engineering", "avg": 1200000 }],
-		"headcountByCountry": [{ "country": "India", "count": 3200, "pct": 32 }],
-		"salaryRangeByRole": [
-			{ "role": "Engineer", "min": 400000, "avg": 800000, "max": 2000000 }
-		],
-		"hiringTrend": [{ "month": "2024-01", "count": 120 }],
-		"headcountByDepartment": [
-			{ "department": "Engineering", "count": 2800, "pct": 28 }
-		]
-	}
+  "data": {
+    "currency": "INR",
+    "kpi": {
+      "totalEmployees": 10000,
+      "avgSalary": 950000,
+      "maxSalary": { "value": 5000000, "role": "VP", "department": "Engineering" },
+      "minSalary": { "value": 120000, "role": "Junior Engineer", "department": "HR" }
+    },
+    "avgSalaryByDepartment": [{ "department": "Engineering", "avg": 1200000 }],
+    "headcountByCountry":    [{ "country": "India", "count": 3200, "pct": 32 }],
+    "hiringTrend":           [{ "label": "2024-01", "count": 120 }],
+    "headcountByDepartment": [{ "department": "Engineering", "count": 2800, "pct": 28 }]
+  }
 }
 ```
 
@@ -171,7 +186,10 @@ Response shape:
 | Resource | Key pattern | Invalidation |
 |---|---|---|
 | Employee | `emp:{email}` | On update or delete of that employee |
-| Exchange rates | `exg_rates:{base_country}` | TTL: 24 h (rates don't change intra-day) |
+| Employee ID pointer | `emp:ptr:{id}` | Same as above |
+| Employee meta (countries/depts/roles) | `emp:meta` | On employee create or delete; TTL 30 min |
+| Exchange rates | `exg_rates:INR` | TTL: 24 h (rates don't change intra-day) |
+| Insights response | `insights:{country\|"all"}` | TTL: 10 min |
 
 **Strategy:**
 - Employee data is cached per email. Any mutation (create / update / delete) deletes the matching key.

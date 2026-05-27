@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const links = [
-	{ label: "Seed", href: "/setup" },
-	{ label: "Employees", href: "/employees" },
 	{ label: "Insights", href: "/insights" },
+	{ label: "Employees", href: "/employees" },
+	{ label: "Seed", href: "/setup" },
 ];
 
 export function Navbar() {

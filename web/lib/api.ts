@@ -15,6 +15,23 @@ export interface Employee {
   updatedAt:   string;
 }
 
+// Main insights data — KPIs + salary/headcount charts.
+export interface InsightsData {
+  currency: string;
+  kpi: {
+    totalEmployees: number;
+    avgSalary:      number;
+    maxSalary: { value: number; role: string; department: string } | null;
+    minSalary: { value: number; role: string; department: string } | null;
+  };
+  avgSalaryByDepartment: { department: string; avg: number }[];
+  headcountByCountry:    { country: string; count: number; pct: number }[];
+  headcountByDepartment: { department: string; count: number; pct: number }[];
+}
+
+// Hiring trend — fetched independently so the period toggle is isolated.
+export type HiringTrendData = { label: string; count: number }[];
+
 export interface EmployeeListParams {
   page?:       number;
   limit?:      number;
@@ -85,5 +102,27 @@ export const api = {
 
     remove: (id: number) =>
       request<void>(`/employees/${id}`, { method: "DELETE" }),
+  },
+
+  insights: {
+    get: (country?: string) => {
+      const qs = country ? `?country=${encodeURIComponent(country)}` : "";
+      return request<{ data: InsightsData }>(`/insights${qs}`);
+    },
+
+    getHiringTrend: (
+      country?:     string,
+      trendBy?:     "week" | "month" | "year",
+      year?:        string,   // filter to a specific year  (when trendBy = "month")
+      month?:       string,   // filter to a specific month (when trendBy = "week"), format "YYYY-MM"
+    ) => {
+      const qs = new URLSearchParams();
+      if (country) qs.set("country", country);
+      if (trendBy) qs.set("trendBy", trendBy);
+      if (year)    qs.set("year",    year);
+      if (month)   qs.set("month",   month);
+      const q = qs.toString();
+      return request<{ data: HiringTrendData }>(`/insights/hiring-trend${q ? `?${q}` : ""}`);
+    },
   },
 };
