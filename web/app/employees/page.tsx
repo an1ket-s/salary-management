@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,19 +30,18 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/setup/Pagination";
 import { api, type Employee } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
 	Check,
-	ChevronLeft,
-	ChevronRight,
 	Copy,
 	Loader2,
 	Pencil,
 	Plus,
+	Search,
 	Trash2,
 } from "lucide-react";
-import { Pagination } from "@/components/setup/Pagination";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -159,6 +159,8 @@ const EMPTY_FORM = {
 	joiningDate: "",
 };
 
+const DEFAULT_SORT = "createdAt_desc";
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getPageRange(current: number, total: number): (number | "…")[] {
@@ -205,41 +207,58 @@ function CopyButton({ text }: { text: string }) {
 	);
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// ── Inner component (needs Suspense boundary for useSearchParams) ─────────────
 
-export default function EmployeesPage() {
-	// data
+function EmployeesContent() {
+	const router = useRouter();
+	const searchParams = useSearchParams();
+
+	// ── Applied filters (from URL — drive the API call) ────────────────────────
+	const appliedSearch = searchParams.get("search") ?? "";
+	const appliedCountry = searchParams.get("country") ?? "";
+	const appliedDepartment = searchParams.get("department") ?? "";
+	const appliedRole = searchParams.get("role") ?? "";
+	const appliedSort = searchParams.get("sort") ?? DEFAULT_SORT;
+	const appliedPage = Number(searchParams.get("page") ?? "1");
+
+	// ── Draft filters (local — updated as user interacts, not yet applied) ──────
+	const [draft, setDraft] = useState({
+		search: appliedSearch,
+		country: appliedCountry,
+		department: appliedDepartment,
+		role: appliedRole,
+		sort: appliedSort,
+	});
+
+	// Sync draft when URL changes (browser back / forward)
+	useEffect(() => {
+		setDraft({
+			search: searchParams.get("search") ?? "",
+			country: searchParams.get("country") ?? "",
+			department: searchParams.get("department") ?? "",
+			role: searchParams.get("role") ?? "",
+			sort: searchParams.get("sort") ?? DEFAULT_SORT,
+		});
+	}, [searchParams]);
+
+	// ── Data ───────────────────────────────────────────────────────────────────
 	const [employees, setEmployees] = useState<Employee[]>([]);
 	const [total, setTotal] = useState(0);
 	const [totalPages, setTotalPages] = useState(0);
 	const [loading, setLoading] = useState(true);
 
-	// meta for filter dropdowns
 	const [meta, setMeta] = useState<{
 		countries: string[];
 		departments: string[];
 		roles: string[];
-	}>({
-		countries: [],
-		departments: [],
-		roles: [],
-	});
+	}>({ countries: [], departments: [], roles: [] });
 
-	// filters
-	const [searchInput, setSearchInput] = useState("");
-	const [search, setSearch] = useState("");
-	const [page, setPage] = useState(1);
-	const [country, setCountry] = useState("");
-	const [department, setDepartment] = useState("");
-	const [role, setRole] = useState("");
-	const [sortKey, setSortKey] = useState("createdAt_desc");
-
-	// modals
+	// ── Modals ─────────────────────────────────────────────────────────────────
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editTarget, setEditTarget] = useState<Employee | null>(null);
 	const [deleteId, setDeleteId] = useState<number | null>(null);
 
-	// form
+	// ── Form ───────────────────────────────────────────────────────────────────
 	const [form, setForm] = useState(EMPTY_FORM);
 	const [formError, setFormError] = useState("");
 	const [submitting, setSubmitting] = useState(false);
@@ -250,14 +269,14 @@ export default function EmployeesPage() {
 	const fetchEmployees = useCallback(async () => {
 		setLoading(true);
 		try {
-			const opt = SORT_OPTIONS.find((o) => o.value === sortKey)!;
+			const opt = SORT_OPTIONS.find((o) => o.value === appliedSort)!;
 			const res = await api.employees.list({
-				page,
+				page: appliedPage,
 				limit: LIMIT,
-				search,
-				country: country || undefined,
-				department: department || undefined,
-				role: role || undefined,
+				search: appliedSearch || undefined,
+				country: appliedCountry || undefined,
+				department: appliedDepartment || undefined,
+				role: appliedRole || undefined,
 				sortBy: opt.by,
 				sortOrder: opt.order,
 			});
@@ -267,30 +286,40 @@ export default function EmployeesPage() {
 		} finally {
 			setLoading(false);
 		}
-	}, [page, search, country, department, role, sortKey]);
+	}, [
+		appliedSearch,
+		appliedCountry,
+		appliedDepartment,
+		appliedRole,
+		appliedSort,
+		appliedPage,
+	]);
 
 	useEffect(() => {
 		fetchEmployees();
 	}, [fetchEmployees]);
-
 	useEffect(() => {
-		api.employees.meta().then((res) => setMeta(res.data));
+		api.employees.meta().then((r) => setMeta(r.data));
 	}, []);
 
-	// debounce search → reset to page 1
-	useEffect(() => {
-		const t = setTimeout(() => {
-			setSearch(searchInput);
-			setPage(1);
-		}, 400);
-		return () => clearTimeout(t);
-	}, [searchInput]);
+	// ── Filter actions ─────────────────────────────────────────────────────────
 
-	// ── Filter helpers ─────────────────────────────────────────────────────────
+	function applyFilters() {
+		const params = new URLSearchParams();
+		if (draft.search) params.set("search", draft.search);
+		if (draft.country) params.set("country", draft.country);
+		if (draft.department) params.set("department", draft.department);
+		if (draft.role) params.set("role", draft.role);
+		if (draft.sort !== DEFAULT_SORT) params.set("sort", draft.sort);
+		// page resets to 1 on new filter apply — omit it from URL
+		router.replace(`?${params.toString()}`);
+	}
 
-	function filter<T>(setter: (v: T) => void, value: T) {
-		setter(value);
-		setPage(1);
+	function goToPage(p: number) {
+		const params = new URLSearchParams(searchParams.toString());
+		if (p === 1) params.delete("page");
+		else params.set("page", String(p));
+		router.push(`?${params.toString()}`, { scroll: false });
 	}
 
 	// ── Modal helpers ──────────────────────────────────────────────────────────
@@ -329,7 +358,6 @@ export default function EmployeesPage() {
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
 		setFormError("");
-
 		const {
 			firstName,
 			lastName,
@@ -373,11 +401,8 @@ export default function EmployeesPage() {
 				salary,
 				joiningDate: joiningDate + "T00:00:00.000Z",
 			};
-			if (editTarget) {
-				await api.employees.update(editTarget.id, payload);
-			} else {
-				await api.employees.create(payload);
-			}
+			if (editTarget) await api.employees.update(editTarget.id, payload);
+			else await api.employees.create(payload);
 			closeModal();
 			fetchEmployees();
 		} catch (err) {
@@ -405,8 +430,8 @@ export default function EmployeesPage() {
 
 	// ── Render ─────────────────────────────────────────────────────────────────
 
-	const from = total === 0 ? 0 : (page - 1) * LIMIT + 1;
-	const to = Math.min(page * LIMIT, total);
+	const from = total === 0 ? 0 : (appliedPage - 1) * LIMIT + 1;
+	const to = Math.min(appliedPage * LIMIT, total);
 
 	return (
 		<div className="space-y-6">
@@ -435,13 +460,18 @@ export default function EmployeesPage() {
 				<div className="flex flex-wrap gap-3">
 					<Input
 						placeholder="Search name or email…"
-						value={searchInput}
-						onChange={(e) => setSearchInput(e.target.value)}
+						value={draft.search}
+						onChange={(e) =>
+							setDraft((d) => ({ ...d, search: e.target.value }))
+						}
+						onKeyDown={(e) => e.key === "Enter" && applyFilters()}
 						className="w-56"
 					/>
 					<Select
-						value={country || "__all"}
-						onValueChange={(v) => filter(setCountry, v === "__all" ? "" : v)}
+						value={draft.country || "__all"}
+						onValueChange={(v) =>
+							setDraft((d) => ({ ...d, country: v === "__all" ? "" : v }))
+						}
 					>
 						<SelectTrigger className="w-40">
 							<SelectValue />
@@ -456,24 +486,28 @@ export default function EmployeesPage() {
 						</SelectContent>
 					</Select>
 					<Select
-						value={department || "__all"}
-						onValueChange={(v) => filter(setDepartment, v === "__all" ? "" : v)}
+						value={draft.department || "__all"}
+						onValueChange={(v) =>
+							setDraft((d) => ({ ...d, department: v === "__all" ? "" : v }))
+						}
 					>
 						<SelectTrigger className="w-44">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="__all">All Departments</SelectItem>
-							{meta.departments.map((d) => (
-								<SelectItem key={d} value={d}>
-									{d}
+							{meta.departments.map((dept) => (
+								<SelectItem key={dept} value={dept}>
+									{dept}
 								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>
 					<Select
-						value={role || "__all"}
-						onValueChange={(v) => filter(setRole, v === "__all" ? "" : v)}
+						value={draft.role || "__all"}
+						onValueChange={(v) =>
+							setDraft((d) => ({ ...d, role: v === "__all" ? "" : v }))
+						}
 					>
 						<SelectTrigger className="w-40">
 							<SelectValue />
@@ -488,11 +522,8 @@ export default function EmployeesPage() {
 						</SelectContent>
 					</Select>
 					<Select
-						value={sortKey}
-						onValueChange={(v) => {
-							setSortKey(v);
-							setPage(1);
-						}}
+						value={draft.sort}
+						onValueChange={(v) => setDraft((d) => ({ ...d, sort: v }))}
 					>
 						<SelectTrigger className="w-48">
 							<SelectValue />
@@ -505,6 +536,13 @@ export default function EmployeesPage() {
 							))}
 						</SelectContent>
 					</Select>
+
+					<Button
+						onClick={applyFilters}
+						className="bg-indigo-600 hover:bg-indigo-700 text-white"
+					>
+						<Search className="h-4 w-4" />
+					</Button>
 				</div>
 			</Card>
 
@@ -628,11 +666,10 @@ export default function EmployeesPage() {
 					</TableBody>
 				</Table>
 
-				{/* ── Pagination ── */}
 				{total > 0 && (
 					<Pagination
-						page={page}
-						setPage={setPage}
+						page={appliedPage}
+						onPageChange={goToPage}
 						total={total}
 						pageSize={LIMIT}
 						from={from}
@@ -842,5 +879,15 @@ export default function EmployeesPage() {
 				</DialogContent>
 			</Dialog>
 		</div>
+	);
+}
+
+// ── Page export (Suspense boundary required by useSearchParams) ───────────────
+
+export default function EmployeesPage() {
+	return (
+		<Suspense>
+			<EmployeesContent />
+		</Suspense>
 	);
 }
