@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
 	Area,
 	AreaChart,
@@ -446,9 +447,17 @@ function HiringTrendChart({ country }: { country: string }) {
 // ── InsightsPage ─────────────────────────────────────────────────────────────
 
 export default function InsightsPage() {
+	const router = useRouter();
 	const [country, setCountry] = useState("");
 	const [data, setData] = useState<InsightsData | null>(null);
 	const [loading, setLoading] = useState(true);
+
+	// Navigate to the employees list pre-filtered by department (+ country if set)
+	function drillToEmployees(department: string) {
+		const qs = new URLSearchParams({ department });
+		if (country) qs.set("country", country);
+		router.push(`/employees?${qs}`);
+	}
 
 	// Only depends on country — trendBy changes never trigger this
 	const load = useCallback(async () => {
@@ -593,14 +602,27 @@ export default function InsightsPage() {
 										tickLine={false}
 									/>
 									<Tooltip
-										content={<ChartTooltip currency={currency} isSalary />}
 										cursor={{ fill: "#6366f115" }}
+										content={({ active, payload, label: l }: any) => {
+											if (!active || !payload?.length) return null;
+											return (
+												<div className="rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-lg text-xs">
+													<p className="font-semibold text-slate-700">{l}</p>
+													<p className="text-slate-500">
+														Avg: {fmtFull(payload[0].value, currency)}
+													</p>
+													<p className="mt-1 text-indigo-400">Click to view employees →</p>
+												</div>
+											);
+										}}
 									/>
 									<Bar
 										dataKey="avg"
 										name="avg salary"
 										fill="#6366F1"
 										radius={[4, 4, 0, 0]}
+										className="cursor-pointer"
+										onClick={(entry: any) => drillToEmployees(entry.department)}
 									/>
 								</BarChart>
 							</ResponsiveContainer>
@@ -631,6 +653,8 @@ export default function InsightsPage() {
 										innerRadius="50%"
 										outerRadius="70%"
 										paddingAngle={2}
+										cursor="pointer"
+										onClick={(entry: any) => drillToEmployees(entry.department)}
 									>
 										{data.headcountByDepartment.map((_, i) => (
 											<Cell
@@ -686,6 +710,7 @@ export default function InsightsPage() {
 													<p className="text-slate-500">
 														{d.count.toLocaleString()} employees · {d.pct}%
 													</p>
+													<p className="mt-1 text-indigo-400">Click to view employees →</p>
 												</div>
 											);
 										}}

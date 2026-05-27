@@ -26,6 +26,9 @@ model Employee {
   @@index([country])
   @@index([role])
   @@index([country, role])
+  @@index([joiningDate])
+  @@index([country, joiningDate])
+  @@index([country, department])
 }
 
 model NameBank {
