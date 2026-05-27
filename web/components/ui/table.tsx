@@ -14,7 +14,7 @@ const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttribut
   ({ className, ...props }, ref) => (
     <thead
       ref={ref}
-      className={cn("bg-slate-50/70 text-left text-xs font-semibold uppercase tracking-widest text-slate-400", className)}
+      className={cn("bg-slate-50/70 text-left text-xs font-semibold uppercase tracking-widest text-slate-400 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]", className)}
       {...props}
     />
   )
