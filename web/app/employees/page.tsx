@@ -16,7 +16,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { api, type Employee } from "@/lib/api";
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Check, ChevronLeft, ChevronRight, Copy, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,19 @@ const SORT_OPTIONS = [
   { value: "firstName_desc", label: "Name: Z → A",         by: "firstName",  order: "desc" },
 ];
 
+const ROLE_COLORS: Record<string, string> = {
+  "Junior Engineer": "bg-sky-100     text-sky-700",
+  "Engineer":        "bg-indigo-100  text-indigo-700",
+  "Senior Engineer": "bg-violet-100  text-violet-700",
+  "Tech Lead":       "bg-purple-100  text-purple-700",
+  "Manager":         "bg-amber-100   text-amber-700",
+  "Senior Manager":  "bg-orange-100  text-orange-700",
+  "Director":        "bg-rose-100    text-rose-700",
+  "VP":              "bg-pink-100    text-pink-700",
+  "Analyst":         "bg-teal-100    text-teal-700",
+  "Designer":        "bg-emerald-100 text-emerald-700",
+};
+
 const LIMIT = 20;
 
 const EMPTY_FORM = {
@@ -55,6 +69,13 @@ const EMPTY_FORM = {
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function getPageRange(current: number, total: number): (number | "…")[] {
+  if (total <= 6) return Array.from({ length: total }, (_, i) => i + 1);
+  if (current <= 3)          return [1, 2, 3, "…", total];
+  if (current >= total - 2)  return [1, "…", total - 2, total - 1, total];
+  return [1, "…", current - 1, current, current + 1, "…", total];
+}
 
 function formatSalary(salary: number, country: string) {
   return `${CURRENCY[country] ?? "$"}${salary.toLocaleString()}`;
@@ -66,6 +87,25 @@ function formatDate(iso: string) {
 
 function toDateInput(iso: string) {
   return iso ? iso.split("T")[0] : "";
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <button
+      onClick={copy}
+      className="opacity-0 group-hover:opacity-100 ml-1.5 transition-opacity text-slate-300 hover:text-indigo-500"
+    >
+      {copied
+        ? <Check className="h-3 w-3 text-emerald-500" />
+        : <Copy className="h-3 w-3" />}
+    </button>
+  );
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -313,9 +353,16 @@ export default function EmployeesPage() {
                 <TableCell className="font-medium text-slate-900">
                   {emp.firstName} {emp.lastName}
                 </TableCell>
-                <TableCell className="text-slate-500">{emp.email}</TableCell>
+                <TableCell className="text-slate-500">
+                  <div className="group flex items-center">
+                    <span>{emp.email}</span>
+                    <CopyButton text={emp.email} />
+                  </div>
+                </TableCell>
                 <TableCell>
-                  <Badge variant="secondary" className="text-xs font-normal border-0">{emp.role}</Badge>
+                  <Badge className={cn("text-xs font-medium border-0", ROLE_COLORS[emp.role] ?? "bg-slate-100 text-slate-700")}>
+                    {emp.role}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-slate-600">{emp.department}</TableCell>
                 <TableCell className="text-slate-600">{emp.country}</TableCell>
@@ -350,20 +397,49 @@ export default function EmployeesPage() {
 
         {/* ── Pagination ── */}
         {total > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 text-sm text-slate-400">
-            <span>{from}–{to} of {total.toLocaleString()}</span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" disabled={page === 1} onClick={() => setPage(p => p - 1)}
-                className="text-slate-500 hover:text-slate-700">
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <span className="tabular-nums text-slate-500">Page {page} of {totalPages}</span>
-              <Button size="sm" variant="ghost" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
-                className="text-slate-500 hover:text-slate-700">
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm">
+            <span className="text-slate-400">
+              Showing {from}–{to} of {total.toLocaleString()} employees
+            </span>
+
+            <div className="flex items-center gap-1">
+              {/* Prev */}
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => p - 1)}
+                className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" /> Prev
+              </button>
+
+              {/* Page numbers */}
+              {getPageRange(page, totalPages).map((p, i) =>
+                p === "…" ? (
+                  <span key={`ellipsis-${i}`} className="w-8 text-center text-slate-400">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors",
+                      p === page
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+
+              {/* Next */}
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage(p => p + 1)}
+                className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-40"
+              >
+                Next <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}
