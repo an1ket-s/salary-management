@@ -2,7 +2,19 @@ import { insightsRepository, type TrendBy } from "../repositories/insights.js";
 import { cache } from "../lib/cache.js";
 import env from "../config/env.js";
 
-const RATES_TTL = 86_400; // 24 h
+const RATES_TTL    = 86_400; // 24 h
+const INSIGHTS_TTL = 600;   // 10 min
+const TREND_TTL    = 600;   // 10 min
+
+const insightsCacheKey = (country?: string) =>
+  `insights:${country ?? "all"}`;
+
+const trendCacheKey = (
+  country?:     string,
+  trendBy?:     string,
+  yearFilter?:  string,
+  monthFilter?: string,
+) => `trend:${country ?? "all"}:${trendBy ?? "year"}:${yearFilter ?? ""}:${monthFilter ?? ""}`;
 
 const COUNTRY_CURRENCY: Record<string, string> = {
   India:     "INR",
@@ -42,6 +54,10 @@ export const insightsService = {
   // Main dashboard data — KPIs + salary/headcount charts.
   // Does NOT include hiring trend (served by its own endpoint).
   async getInsights(country?: string) {
+    const KEY = insightsCacheKey(country);
+    const cached = await cache.get<object>(KEY);
+    if (cached) return cached;
+
     const currency = country ? (COUNTRY_CURRENCY[country] ?? "INR") : "INR";
     const rates    = country ? null : await getExchangeRates();
 
@@ -84,7 +100,7 @@ export const insightsService = {
       }))
       .sort((a, b) => b.count - a.count);
 
-    return {
+    const result = {
       currency,
       kpi: {
         totalEmployees: n,
@@ -100,6 +116,9 @@ export const insightsService = {
       headcountByCountry,
       headcountByDepartment,
     };
+
+    await cache.set(KEY, result, INSIGHTS_TTL);
+    return result;
   },
 
   // Hiring trend — served separately so drill-down re-fetches only this.
@@ -109,6 +128,12 @@ export const insightsService = {
     yearFilter?:  string,
     monthFilter?: string,
   ) {
-    return insightsRepository.getHiringTrend(country, trendBy, yearFilter, monthFilter);
+    const KEY = trendCacheKey(country, trendBy, yearFilter, monthFilter);
+    const cached = await cache.get<object>(KEY);
+    if (cached) return cached;
+
+    const result = await insightsRepository.getHiringTrend(country, trendBy, yearFilter, monthFilter);
+    await cache.set(KEY, result, TREND_TTL);
+    return result;
   },
 };

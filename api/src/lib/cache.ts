@@ -27,4 +27,18 @@ export const cache = {
       // ignore
     }
   },
+
+  // Delete all keys matching a glob pattern (e.g. "insights:*").
+  // Uses SCAN so it never blocks the Redis event loop.
+  async delByPattern(pattern: string): Promise<void> {
+    try {
+      const keys: string[] = [];
+      for await (const batch of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+        keys.push(...batch);
+      }
+      if (keys.length > 0) await redis.del(keys);
+    } catch {
+      // non-fatal
+    }
+  },
 };

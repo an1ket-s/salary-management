@@ -46,6 +46,8 @@ export const employeesService = {
 			cache.set(empKey(employee.email), employee, EMP_TTL),
 			cache.set(ptrKey(employee.id), employee.email, EMP_TTL),
 			cache.del(META_KEY),
+			cache.delByPattern("insights:*"),
+			cache.delByPattern("trend:*"),
 		]);
 		return employee;
 	},
@@ -55,7 +57,11 @@ export const employeesService = {
 		const employee = await employeesRepository.update(id, data);
 
 		// invalidate old keys (handles edge case where email changed)
-		await cache.del(empKey(existing.email), ptrKey(id));
+		await Promise.all([
+			cache.del(empKey(existing.email), ptrKey(id)),
+			cache.delByPattern("insights:*"),
+			cache.delByPattern("trend:*"),
+		]);
 
 		// re-cache updated record
 		await Promise.all([
@@ -69,7 +75,11 @@ export const employeesService = {
 	async remove(id: number): Promise<void> {
 		const existing = await employeesService.findById(id); // 404 guard
 		await employeesRepository.remove(id);
-		await cache.del(empKey(existing.email), ptrKey(id), META_KEY);
+		await Promise.all([
+			cache.del(empKey(existing.email), ptrKey(id), META_KEY),
+			cache.delByPattern("insights:*"),
+			cache.delByPattern("trend:*"),
+		]);
 	},
 
 	async getMeta() {
