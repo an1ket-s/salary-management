@@ -3,19 +3,20 @@ import app from "./app";
 import env from "./config/env";
 import prisma from "./lib/prisma";
 import { connectRedis } from "./lib/redis";
+import logger from "./lib/logger";
 
 async function start() {
 	await prisma.$connect();
-	console.log("Database connected");
+	logger.info("Prisma Database connected");
 
 	await connectRedis();
 
 	app.listen(env.PORT, () => {
-		console.log(`Server running on http://localhost:${env.PORT}`);
+		logger.info(`Server running on http://localhost:${env.PORT}`);
 	});
 }
 
 start().catch((err) => {
-	console.error("Failed to start server:", err);
+	logger.error("Failed to start server", { error: err });
 	process.exit(1);
 });
