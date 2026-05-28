@@ -37,12 +37,13 @@ PostgreSQL can use a B-tree index for range comparisons but not for wrapped func
 ### 2 — Redis caching for both endpoints
 
 Both endpoints now follow the cache-aside pattern:
+
 1. Check Redis → return immediately on hit (~1 ms)
 2. On miss → compute result → write to Redis (TTL 10 min) → return
 
-| Cache key | TTL |
-|---|---|
-| `insights:{country\|"all"}` | 10 min |
+| Cache key                                         | TTL    |
+| ------------------------------------------------- | ------ |
+| `insights:{country\|"all"}`                       | 10 min |
 | `trend:{country\|"all"}:{trendBy}:{year}:{month}` | 10 min |
 
 Any employee `create`, `update`, or `remove` evicts stale data:
@@ -64,13 +65,14 @@ Replaced the `findMany` full-table-scan with targeted aggregate queries. The DB 
 
 **Single-country path — before vs after:**
 
-| | Before | After |
-|---|---|---|
-| Rows transferred to Node.js | N (all employees in country) | ~20 (aggregated) |
-| JS aggregation loops | 5× O(n) reduce/map | 0 |
-| DB queries | 1 `findMany` + 1 `groupBy` | 4 parallel aggregate queries |
+|                             | Before                       | After                        |
+| --------------------------- | ---------------------------- | ---------------------------- |
+| Rows transferred to Node.js | N (all employees in country) | ~20 (aggregated)             |
+| JS aggregation loops        | 5× O(n) reduce/map           | 0                            |
+| DB queries                  | 1 `findMany` + 1 `groupBy`   | 4 parallel aggregate queries |
 
 Queries run in `Promise.all`:
+
 - `aggregate` → total count + avg salary (1 row)
 - `findFirst ORDER BY salary DESC LIMIT 1` → max employee with role + dept (1 row)
 - `findFirst ORDER BY salary ASC LIMIT 1` → min employee with role + dept (1 row)
@@ -78,12 +80,13 @@ Queries run in `Promise.all`:
 
 **All-countries path — before vs after:**
 
-| | Before | After |
-|---|---|---|
-| Rows transferred to Node.js | N (all employees) | ~80 (aggregated) |
-| JS aggregation loops | 5× O(n) | O(n_countries × n_depts) ≈ O(50) |
+|                             | Before            | After                            |
+| --------------------------- | ----------------- | -------------------------------- |
+| Rows transferred to Node.js | N (all employees) | ~80 (aggregated)                 |
+| JS aggregation loops        | 5× O(n)           | O(n_countries × n_depts) ≈ O(50) |
 
 Queries run in `Promise.all`:
+
 - `groupBy country` → count + salary sum per country (~10 rows)
 - `groupBy country, department` → count + salary sum per country+dept (~50 rows)
 - `DISTINCT ON (country) ORDER BY salary DESC` → highest-paid employee per country (~10 rows)
@@ -150,6 +153,7 @@ No query code was changed. Prisma's `contains` + `mode: "insensitive"` already p
 Trigram indexes are not effective for terms shorter than 3 characters — PostgreSQL falls back to a seq scan. To prevent short-term queries from hitting the DB:
 
 **Frontend (`web/app/employees/page.tsx`):**
+
 - 400 ms debounce on the search input — prevents a query on every keystroke
 - Auto-trigger only fires when the trimmed value is empty (clear) or ≥ 3 characters; 1–2 character inputs are held until the user presses Enter or reaches 3 chars
 - "Reset Filters" button (`FilterX` icon) clears search + all dropdowns + URL state in one action
@@ -157,30 +161,51 @@ Trigram indexes are not effective for terms shorter than 3 characters — Postgr
 **Backend (`api/src/controllers/employees.ts`):**
 
 ```ts
-search: z.string().trim().min(3).optional()
+search: z.string().trim().min(3).optional();
 ```
 
 Zod strips leading/trailing whitespace and rejects search terms shorter than 3 characters with a 400 response — the query never reaches the repository or the database.
 
 #### Effect
 
-| Concern | Before | After |
-|---|---|---|
-| Search query plan | Sequential scan | GIN trigram index scan |
-| Requests per keystroke | 1 per keydown (~15 req for "alice") | 1 after 400 ms idle, min 3 chars |
-| Short-term DB hits | Every 1–2 char input hits DB + seq scan | Blocked at Zod layer |
-| Email ILIKE index use | Bypassed (B-tree, case-sensitive) | Covered by `emp_email_trgm` GIN |
+| Concern                | Before                                  | After                            |
+| ---------------------- | --------------------------------------- | -------------------------------- |
+| Search query plan      | Sequential scan                         | GIN trigram index scan           |
+| Requests per keystroke | 1 per keydown (~15 req for "alice")     | 1 after 400 ms idle, min 3 chars |
+| Short-term DB hits     | Every 1–2 char input hits DB + seq scan | Blocked at Zod layer             |
+| Email ILIKE index use  | Bypassed (B-tree, case-sensitive)       | Covered by `emp_email_trgm` GIN  |
+
+---
+
+### 5 — Winston structured logging for performance observability
+
+Raw `console.log` output makes it hard to correlate slow requests, error rates, and DB behaviour across a running server. Winston replaces all `console.*` calls with structured, level-tagged, metadata-rich log entries.
+
+#### What is logged and where
+
+| Source          | Event                        | Level                     | Metadata                        |
+| --------------- | ---------------------------- | ------------------------- | ------------------------------- |
+| `requestLogger` | Every HTTP request           | `info` / `error`          | `method`, `url`, `status`, `ms` |
+| `errorHandler`  | `AppError`                   | `error`                   | `statusCode`, `message`         |
+| `errorHandler`  | Prisma P2002 / P2025         | `error`                   | Prisma `meta.target`            |
+| `errorHandler`  | Unhandled errors             | `error`                   | `message`, `stack`              |
+| `redis.ts`      | Connect / disconnect / error | `info` / `warn` / `error` | `error` message                 |
+| `index.ts`      | Server startup               | `info`                    | port                            |
+
+#### Duplicate log prevention
+
+Prisma's own stdout logging is disabled (`log: []` on `PrismaClient`). Without this, a Prisma error would print twice — once from Prisma's internal logger and once from the Winston `errorHandler`. Disabling Prisma's error output ensures a single structured Winston log per event.
 
 ---
 
 ## Summary
 
-| Concern | Before | After |
-|---|---|---|
-| DB rows into Node.js (insights) | O(n employees) | O(n_countries × n_depts) ≈ 80 |
-| Repeated load latency | Full DB query every time | ~1 ms Redis GET |
-| Trend query index use | Sequential scan | Index scan (date-range predicate) |
-| Stale cache after mutations | N/A (no cache) | Evicted on create / update / delete |
-| Employee search query plan | Sequential scan (ILIKE + B-tree) | GIN trigram index scan |
-| Search requests per keystroke | 1 per keydown | 1 per 400 ms idle burst, min 3 chars |
-| Short search terms hitting DB | Always | Blocked by Zod `.trim().min(3)` |
+| Concern                         | Before                           | After                                |
+| ------------------------------- | -------------------------------- | ------------------------------------ |
+| DB rows into Node.js (insights) | O(n employees)                   | O(n_countries × n_depts) ≈ 80        |
+| Repeated load latency           | Full DB query every time         | ~1 ms Redis GET                      |
+| Trend query index use           | Sequential scan                  | Index scan (date-range predicate)    |
+| Stale cache after mutations     | N/A (no cache)                   | Evicted on create / update / delete  |
+| Employee search query plan      | Sequential scan (ILIKE + B-tree) | GIN trigram index scan               |
+| Search requests per keystroke   | 1 per keydown                    | 1 per 400 ms idle burst, min 3 chars |
+| Short search terms hitting DB   | Always                           | Blocked by Zod `.trim().min(3)`      |

@@ -277,8 +277,79 @@ GET /api/insights
 
 ---
 
+## Logging
+
+**Library:** [Winston](https://github.com/winstonjs/winston) — structured, level-based logging with multiple transports.
+
+### Logger (`lib/logger.ts`)
+
+Single exported singleton. Format and level vary by environment:
+
+| Environment | Console format | Level |
+|---|---|---|
+| `development` | Colorized — `HH:mm:ss [level] message {meta}` | `debug` |
+| `production` | JSON (structured, ingestable by Datadog / CloudWatch) | `info` |
+
+File transports always write JSON regardless of environment:
+
+| File | Content |
+|---|---|
+| `logs/combined.log` | All log levels |
+| `logs/error.log` | Errors only |
+| `logs/exceptions.log` | Uncaught exceptions (Winston `exceptionHandlers`) |
+| `logs/rejections.log` | Unhandled promise rejections (Winston `rejectionHandlers`) |
+
+### HTTP request logging (`middleware/requestLogger.ts`)
+
+Fires on `res.finish` so the status code is final. Log level is derived from status:
+
+| Status range | Winston level |
+|---|---|
+| 2xx / 3xx / default | `info` |
+| 4xx | `error` |
+| 5xx | `error` |
+
+Each log entry includes `method`, `url`, `status`, and `ms` as structured metadata.
+
+### Error logging (`middleware/errorHandler.ts`)
+
+Prisma's own stdout error logging is disabled (`log: []` on `PrismaClient`) to avoid duplicate output. The error handler owns all error logging via Winston:
+
+| Error type | Log message |
+|---|---|
+| `AppError` | `"AppError"` + `statusCode` + `message` |
+| `P2002` unique constraint | `"Unique constraint violation"` + `meta.target` |
+| `P2025` not found | `"Record not found"` + `meta` |
+| Anything else | `"Unhandled error"` + `message` + `stack` |
+
+### Architecture with logging
+
+```
+Browser
+  │  fetch /api/*
+  ▼
+Express API (port 3001)
+  │
+  ├─ requestLogger middleware     ← logs every request on res.finish
+  │
+  ├─ routes → controllers → services → repositories
+  │                                         │
+  │                                    Prisma ORM
+  │
+  ├─ errorHandler middleware      ← logs all errors via Winston
+  │
+  └─ Winston logger
+       ├─ Console (colorized dev / JSON prod)
+       ├─ logs/combined.log
+       ├─ logs/error.log
+       ├─ logs/exceptions.log
+       └─ logs/rejections.log
+```
+
+---
+
 ## Further Reading
 
-- [PERFORMANCE.md](./PERFORMANCE.md) — problem statement, all three optimisation steps, before/after comparisons
+- [PERFORMANCE.md](./PERFORMANCE.md) — problem statement, all optimisation steps, before/after comparisons
 - [TRADEOFFS.md](./TRADEOFFS.md) — design decisions and their trade-offs
 - [AI_PROMPTS.md](./AI_PROMPTS.md) — key prompts used with Claude Code and what each one produced
