@@ -21,14 +21,33 @@ model Employee {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([email])
-  @@index([department])
-  @@index([country])
-  @@index([role])
-  @@index([country, role])
+  // Insights hiring-trend queries
   @@index([joiningDate])
   @@index([country, joiningDate])
-  @@index([country, department])
+
+  // No-filter — sort only
+  @@index([createdAt])
+  @@index([salary])
+
+  // Single filter + sort
+  @@index([country, createdAt])
+  @@index([country, salary])
+  @@index([department, createdAt])
+  @@index([department, salary])
+  @@index([role, createdAt])
+  @@index([role, salary])
+
+  // Two-filter combos + sort
+  @@index([country, department, createdAt])
+  @@index([country, department, salary])
+  @@index([country, role, createdAt])
+  @@index([country, role, salary])
+  @@index([department, role, createdAt])
+  @@index([department, role, salary])
+
+  // All three filters + sort
+  @@index([country, department, role, createdAt])
+  @@index([country, department, role, salary])
 }
 
 model NameBank {
