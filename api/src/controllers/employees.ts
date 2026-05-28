@@ -19,7 +19,7 @@ const updateSchema = createSchema.partial();
 const listQuerySchema = z.object({
 	page: z.coerce.number().int().positive().default(1),
 	limit: z.coerce.number().int().min(1).max(100).default(20),
-	search: z.string().optional(),
+	search: z.string().trim().min(3).optional(),
 	country: z.string().optional(),
 	department: z.string().optional(),
 	role: z.string().optional(),

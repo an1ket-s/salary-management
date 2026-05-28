@@ -498,7 +498,11 @@ function EmployeesContent() {
 							if (e.key === "Enter") {
 								if (searchTimerRef.current)
 									clearTimeout(searchTimerRef.current);
-								applyFilters();
+								if (
+									searchRef.current.length === 0 ||
+									searchRef.current.length >= 3
+								)
+									applyFilters();
 							}
 						}}
 						className="w-56"
