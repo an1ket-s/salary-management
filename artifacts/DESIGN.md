@@ -24,7 +24,8 @@ Full CRUD interface for the 10,000-employee dataset.
 Key elements:
 
 - Page header with total count badge and "Add Employee" button
-- Filter bar: keyword search + Country / Department / Role dropdowns + Sort
+- Filter bar: keyword search + Country / Department / Role dropdowns + Sort + "Reset Filters" button
+- Search behaviour: 400 ms debounce, minimum 3 characters before auto-triggering (enforced on both FE and BE); 1–2 char input is held until the user presses Enter or reaches 3 chars
 - Paginated table: Name, Email, Role, Department, Country, Salary, Joining Date, Actions
 - Row-level Edit (indigo) and Delete (red) buttons
 - "Add Employee" modal with all form fields (firstName, lastName, phone, email, role, department, country, salary, joiningDate)

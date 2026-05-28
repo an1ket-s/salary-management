@@ -69,3 +69,64 @@
 **Why:** The number of possible filter permutations (search string × country × department × role × sort × page) is too large to cache individually without unbounded Redis growth. Per-record caching (`emp:{email}`) is used for single-record lookups (e.g. edit form pre-fill), where the cache hit rate is high.
 
 **Trade-off:** List queries always hit PostgreSQL. Mitigated by the existing column indexes (`country`, `department`, `role`, `email`) which keep these queries fast even without a cache layer.
+
+---
+
+## GIN Trigram vs PostgreSQL Full-Text Search for employee name/email search
+
+**Decision:** GIN trigram indexes (`pg_trgm`) on `firstName`, `lastName`, and `email` — not PostgreSQL Full-Text Search (FTS).
+
+### Options considered
+
+**Option A — GIN Trigram (`pg_trgm`):** Stores every 3-character slice of a string in a GIN index. Any `ILIKE '%term%'` query where `term` is ≥ 3 characters can use the index instead of a sequential scan.
+
+**Option B — PostgreSQL Full-Text Search (FTS):** Pre-computes `tsvector` lexemes and queries with `tsquery`. Designed for natural-language document search.
+
+| Dimension | GIN Trigram | Full-Text Search |
+|---|---|---|
+| **Partial-name match** (`"ali"` → `"Alice"`) | ✅ Yes — substring match on raw characters | ❌ No — matches whole lexemes only |
+| **Query code changes** | ✅ None — Prisma `contains` + `insensitive` generates `ILIKE '%term%'` natively | ❌ Requires `to_tsvector` / `@@` operator; needs `$queryRaw` or `$queryRawUnsafe` |
+| **ORM compatibility** | ✅ Fully compatible | ❌ Breaks ORM abstraction; loses type safety |
+| **Email field support** | ✅ Treats email as an opaque string — correct behaviour | ❌ Tokenizes `@` and `.` as separators; `alice@company.com` → lexemes `alic`, `compani`, `com` |
+| **Relevance ranking** | ❌ Not built-in | ✅ `ts_rank` available |
+| **Stemming / stop-words** | ❌ Not applicable | ✅ Available (irrelevant for names) |
+| **Index size** | Larger — GIN on raw trigrams (~1.5–3× column data) | Smaller — GIN on lexemes |
+| **Min term length** | 3 characters (planner uses seq scan below this) | No hard minimum (but partial match is broken regardless) |
+| **Extension required** | `pg_trgm` — one `CREATE EXTENSION` | None |
+| **Maintenance overhead** | None after index creation | `tsvector` column must be kept in sync (trigger or Prisma middleware) |
+| **Uniform across all columns** | ✅ Same index type for `firstName`, `lastName`, `email` | ❌ Email needs different dictionary (`simple`); still can't do prefix match without trigram |
+
+### Decision rationale
+
+GIN trigram was chosen because:
+
+1. **It does not break partial-name matching** — the single most important requirement. FTS fails this outright.
+2. **Zero query changes** — Prisma's existing `contains` + `insensitive` ORM calls generate `ILIKE '%term%'`, which the trigram index handles natively. No raw SQL, no schema changes, no ORM workarounds.
+3. **Consistent treatment of all three columns** — one approach covers `firstName`, `lastName`, and `email`. FTS would need two mechanisms (or a degraded UX for email).
+4. **Simplicity** — adding three `CREATE INDEX` statements is the entire implementation. FTS would require new columns, triggers or Prisma middleware to maintain `tsvector`, and raw SQL throughout the search path.
+
+### Trade-offs accepted
+
+| Trade-off | Mitigation |
+|---|---|
+| Larger index size (GIN vs B-tree) | Acceptable at ≤ 100K employees; index fits in shared_buffers |
+| Seq scan for searches < 3 chars | Enforced as a hard minimum on both FE (UI + debounce) and BE (Zod `.trim().min(3)`), so these queries never reach the DB |
+| `pg_trgm` extension required | One-time `CREATE EXTENSION` — no ongoing maintenance |
+| No relevance ranking | Not needed; name/email lookups expect substring-match results, not ranked documents |
+
+### Indexes created
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX CONCURRENTLY emp_firstname_trgm
+  ON "Employee" USING GIN ("firstName" gin_trgm_ops);
+
+CREATE INDEX CONCURRENTLY emp_lastname_trgm
+  ON "Employee" USING GIN ("lastName"  gin_trgm_ops);
+
+CREATE INDEX CONCURRENTLY emp_email_trgm
+  ON "Employee" USING GIN ("email"     gin_trgm_ops);
+```
+
+`CONCURRENTLY` keeps the table writable during index build — important for a live dataset.

@@ -129,3 +129,129 @@ This project was built with [Claude Code](https://claude.ai/code) (Anthropic). T
 3. `onMouseDown={(e) => e.preventDefault()}` on chart wrapper divs — definitive fix; prevents the browser from ever initiating focus during the `mousedown` phase, before any CSS is resolved
 
 ---
+
+## Search Bar Optimizations
+
+### FE + BE optimization audit
+
+### Frontend debounce + minimum character threshold
+
+**Prompt:**
+
+> "In FE, add debounce on search bar. In search bar the minimum char must be 3. First impl FE then we will go to BE optimizations."
+
+**What it produced:**
+
+- `searchRef = useRef(appliedSearch)` — updated synchronously in `onChange` so the debounced callback always reads the latest value without capturing a stale closure
+- `searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)` — stores the pending timer handle so every keystroke cancels the previous one
+- Auto-trigger fires only when `trimmed.length === 0` (clear) or `trimmed.length >= 3`; 1–2 char inputs are held until Enter or the threshold is crossed
+- `onKeyDown Enter` cancels any pending timer and calls `applyFilters()` immediately — users can bypass the debounce by pressing Enter
+
+---
+
+### Focus ring suppression (inputs, selects, modals)
+
+**Prompts:**
+
+> "focus rings are appearing on the search, dropdowns, Modal close icon and modal components. Fix this"
+>
+> "focus ring is still appearing on select and dropdown and modal input"
+
+**What it produced (two iterations, three surfaces):**
+
+**Attempt 1** — Added `focus-visible:ring-*` classes and global CSS rule:
+
+```css
+*:focus:not(:focus-visible) {
+	outline: none;
+	box-shadow: none;
+}
+```
+
+Insufficient: Chrome always fires `:focus-visible` on `<input>` elements even on mouse click (per spec — inputs are deemed keyboard-navigable by UA heuristic), so ring classes still applied.
+
+**Attempt 2 (final)** — Removed all ring utility classes entirely from the affected components:
+
+- `web/components/ui/input.tsx` — stripped `focus-visible:ring-2`, `focus-visible:ring-offset-2`, `focus-visible:ring-ring`; kept only `focus:outline-none`
+- `web/components/ui/select.tsx` — same removal on `SelectTrigger`
+- `web/components/ui/dialog.tsx` — `DialogContent` gets `focus:outline-none` (suppresses Radix's auto-focus outline on open); close button changed from `focus:ring-2` to `focus-visible:ring-2` (keyboard-only ring)
+
+---
+
+### GIN trigram vs Full-Text Search design
+
+**Prompt:**
+
+> "Lets move to BE optimization for index, Suggest me would GIN trigram index be better on firstname and lastName. OR implementing full text search. Lets design first with the advantages, disadvantages and tradeoffs."
+
+**What it produced:**
+
+A structured decision matrix covering:
+
+|                                 | GIN Trigram                  | Full-Text Search                       |
+| ------------------------------- | ---------------------------- | -------------------------------------- |
+| Partial match ("ali" → "Alice") | ✅ Yes                       | ❌ No (whole lexemes only)             |
+| Query code changes required     | ✅ None (Prisma ILIKE works) | ❌ Raw SQL / `$$` operator             |
+| Email field support             | ✅ Works naturally           | ❌ Tokenizes `@` and `.` as separators |
+| Index size vs B-tree            | Larger (GIN)                 | Comparable (lexeme GIN)                |
+| Min term length                 | 3 chars (trigram limit)      | No limit (but partial match broken)    |
+| Relevance ranking               | ❌ Not built-in              | ✅ `ts_rank` available                 |
+
+**Decision:** GIN trigram — substring matching is the primary requirement; FTS breaks it. See [TRADEOFFS.md](./TRADEOFFS.md) for the full rationale.
+
+---
+
+### GIN trigram index creation
+
+**Prompt:**
+
+> "Run trigram on firstname + lastName only Keep B-tree on email. Provide me the queries, i will run it. Along with provide me the validate index query."
+
+**What it produced (then corrected):**
+
+Initial recommendation: trigram on `firstName`/`lastName`; B-tree on `email`.
+
+**Corrected after verification:** B-tree indexes are bypassed for case-insensitive `ILIKE` — the existing `email` unique constraint (a B-tree) was confirmed via `EXPLAIN ANALYZE` to still produce a sequential scan for `ILIKE '%alice%'`. Trigram index added to `email` as well.
+
+**Final SQL delivered:**
+
+```sql
+-- Enable extension
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- GIN trigram indexes
+CREATE INDEX CONCURRENTLY emp_firstname_trgm
+  ON "Employee" USING GIN ("firstName" gin_trgm_ops);
+
+CREATE INDEX CONCURRENTLY emp_lastname_trgm
+  ON "Employee" USING GIN ("lastName"  gin_trgm_ops);
+
+CREATE INDEX CONCURRENTLY emp_email_trgm
+  ON "Employee" USING GIN ("email"     gin_trgm_ops);
+
+-- Verification: list indexes on Employee table
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'Employee';
+```
+
+---
+
+### Backend minimum-length guard
+
+**Prompt:**
+
+> "check the code if the queries are correct and will trigger index search."
+
+**What it produced:**
+
+- Confirmed `buildWhere` in `repositories/employees.ts` uses `contains` + `mode: "insensitive"` — generates `ILIKE '%term%'` which correctly triggers GIN trigram indexes. No repository changes needed.
+- Found missing minimum-length guard on BE: a 1- or 2-character search would reach the DB and trigger a seq scan (trigram indexes require ≥ 3 chars). Fixed by adding `.trim().min(3)` to the Zod schema in `controllers/employees.ts`:
+
+```ts
+search: z.string().trim().min(3).optional();
+```
+
+This rejects sub-3-char requests with HTTP 400 before they reach the repository layer.
+
+---
