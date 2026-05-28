@@ -6,17 +6,21 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SalaryMS",
-  description: "Salary Management System",
+	title: "SalaryMS",
+	description: "Salary Management System",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body className={`${geist.className} bg-slate-50 antialiased`}>
-        <Navbar />
-        <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
-      </body>
-    </html>
-  );
+export default function RootLayout({
+	children,
+}: {
+	children: React.ReactNode;
+}) {
+	return (
+		<html lang="en">
+			<body className={`${geist.className} bg-slate-50 antialiased`}>
+				<Navbar />
+				<main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+			</body>
+		</html>
+	);
 }

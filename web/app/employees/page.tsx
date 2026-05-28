@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import {
 	Check,
 	Copy,
+	FilterX,
 	Loader2,
 	Pencil,
 	Plus,
@@ -230,10 +231,17 @@ function EmployeesContent() {
 		sort: appliedSort,
 	});
 
+	// searchRef always holds the latest typed value so debounce/Enter callbacks
+	// read the correct string even before React re-renders.
+	const searchRef = useRef(appliedSearch);
+	const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 	// Sync draft when URL changes (browser back / forward)
 	useEffect(() => {
+		const s = searchParams.get("search") ?? "";
+		searchRef.current = s;
 		setDraft({
-			search: searchParams.get("search") ?? "",
+			search: s,
 			country: searchParams.get("country") ?? "",
 			department: searchParams.get("department") ?? "",
 			role: searchParams.get("role") ?? "",
@@ -306,13 +314,27 @@ function EmployeesContent() {
 
 	function applyFilters() {
 		const params = new URLSearchParams();
-		if (draft.search) params.set("search", draft.search);
+		const trimmed = searchRef.current.trim();
+		if (trimmed) params.set("search", trimmed);
 		if (draft.country) params.set("country", draft.country);
 		if (draft.department) params.set("department", draft.department);
 		if (draft.role) params.set("role", draft.role);
 		if (draft.sort !== DEFAULT_SORT) params.set("sort", draft.sort);
 		// page resets to 1 on new filter apply — omit it from URL
 		router.replace(`?${params.toString()}`);
+	}
+
+	function clearFilters() {
+		if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+		searchRef.current = "";
+		setDraft({
+			search: "",
+			country: "",
+			department: "",
+			role: "",
+			sort: DEFAULT_SORT,
+		});
+		router.replace("?");
 	}
 
 	function goToPage(p: number) {
@@ -461,10 +483,24 @@ function EmployeesContent() {
 					<Input
 						placeholder="Search name or email…"
 						value={draft.search}
-						onChange={(e) =>
-							setDraft((d) => ({ ...d, search: e.target.value }))
-						}
-						onKeyDown={(e) => e.key === "Enter" && applyFilters()}
+						onChange={(e) => {
+							const val = e.target.value;
+							searchRef.current = val;
+							setDraft((d) => ({ ...d, search: val }));
+
+							if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+							const trimmed = val.trim();
+							if (trimmed.length === 0 || trimmed.length >= 3) {
+								searchTimerRef.current = setTimeout(applyFilters, 400);
+							}
+						}}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								if (searchTimerRef.current)
+									clearTimeout(searchTimerRef.current);
+								applyFilters();
+							}
+						}}
 						className="w-56"
 					/>
 					<Select
@@ -542,6 +578,10 @@ function EmployeesContent() {
 						className="bg-indigo-600 hover:bg-indigo-700 text-white"
 					>
 						<Search className="h-4 w-4" />
+					</Button>
+					<Button onClick={clearFilters} variant="outline">
+						<FilterX className="h-4 w-4" />
+						Reset Filters
 					</Button>
 				</div>
 			</Card>
